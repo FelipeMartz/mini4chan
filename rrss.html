@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mini 4chan Anónimo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    margin-top: 20px;
+    color: #333;
+  }
+  #postForm {
+    margin-top: 20px;
+  }
+  textarea {
+    width: 400px;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    border: 1px solid #aaa;
+    font-size: 14px;
+    resize: none;
+  }
+  button {
+    padding: 10px 20px;
+    border: none;
+    background: #333;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .post {
+    background: white;
+    width: 420px;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 5px;
+    box-shadow: 0px 0px 5px #ccc;
+  }
+  .post-header {
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+</style>
+
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+  // Configuración de tu proyecto Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyAuJNMD4d0a2uehA4UCEx7WNRlkjzWG8X8",
+    authDomain: "mini4chan-50c4d.firebaseapp.com",
+    projectId: "mini4chan-50c4d",
+    storageBucket: "mini4chan-50c4d.firebasestorage.app",
+    messagingSenderId: "476495367772",
+    appId: "1:476495367772:web:3ce2ab7266bfd047eba099",
+    measurementId: "G-VSC6XWFGE7"
+  };
+
+  // Inicializar Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Elementos del DOM
+  const postForm = document.getElementById('postForm');
+  const postText = document.getElementById('postText');
+  const postsContainer = document.getElementById('postsContainer');
+
+  // Enviar un post nuevo
+  postForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = postText.value.trim();
+    if(text){
+      await addDoc(collection(db, "posts"), {
+        text: text,
+        timestamp: serverTimestamp()
+      });
+      postText.value = '';
+    }
+  });
+
+  // Escuchar posts en tiempo real
+  const postsQuery = query(collection(db, "posts"), orderBy("timestamp", "desc"));
+  onSnapshot(postsQuery, (snapshot) => {
+    postsContainer.innerHTML = '';
+    snapshot.forEach((doc, index) => {
+      const data = doc.data();
+      const postDiv = document.createElement('div');
+      postDiv.className = 'post';
+      postDiv.innerHTML = `<div class="post-header">Anónimo #${snapshot.size - index}</div>
+                           <div class="post-body">${data.text}</div>`;
+      postsContainer.appendChild(postDiv);
+    });
+  });
+</script>
+</head>
+<body>
+<h1>Mini 4chan Anónimo</h1>
+
+<form id="postForm">
+  <textarea id="postText" rows="3" placeholder="Escribe tu mensaje aquí..." required></textarea><br>
+  <button type="submit">Publicar</button>
+</form>
+
+<div id="postsContainer"></div>
+</body>
+</html>
+
