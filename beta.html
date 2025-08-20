@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nimbus</title>
+<style>
+body {margin:0; font-family:"Segoe UI", sans-serif; background:#1c1e22; color:#e0e6ed; display:flex;}
+.sidebar {width:220px; background:#22252b; border-right:1px solid #2d3139; padding:20px 10px; height:100vh; box-sizing:border-box;}
+.sidebar h3 {color:#3a8dff; margin-bottom:6px;}
+.sidebar ul {list-style:none; padding:0;}
+.sidebar li {padding:6px 10px; border-radius:8px; margin-bottom:4px; cursor:pointer; transition:background 0.2s;}
+.sidebar li:hover {background:#3a8dff33;}
+.sidebar input {width:100%; padding:6px; border-radius:6px; border:1px solid #3a8dff; margin-bottom:6px; background:#1c1e22; color:white;}
+
+.main {flex:1; display:flex; flex-direction:column;}
+header {display:flex; justify-content:space-between; align-items:center; padding:12px 20px; background:#22252b; border-bottom:1px solid #2d3139; position:sticky; top:0; z-index:100;}
+header h1 {font-size:20px; font-weight:bold; color:#3a8dff; margin:0;}
+.user-area {display:flex; align-items:center; gap:10px;}
+.btn {background:#3a8dff; color:white; border:none; padding:8px 16px; border-radius:999px; font-weight:bold; cursor:pointer; transition:background 0.2s;}
+.btn:hover {background:#2973d9;}
+.profile-pic {width:40px; height:40px; border-radius:50%; cursor:pointer; border:2px solid #3a8dff;}
+
+.feed-container {flex:1; padding:20px 10px; max-width:600px; margin:auto;}
+.new-post {background:#2a2f38; border-radius:12px; padding:12px; margin-bottom:20px;}
+.new-post textarea {width:100%; background:#1c1e22; border:1px solid #3a8dff; border-radius:8px; color:white; padding:10px; font-size:14px; resize:none; margin-bottom:10px;}
+.post {background:#2a2f38; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.4); margin-bottom:20px; transition:transform 0.2s, box-shadow 0.2s;}
+.post:hover {transform:translateY(-3px); box-shadow:0 4px 12px rgba(0,0,0,0.6);}
+.post-header {display:flex; align-items:center; padding:12px; font-size:14px; color:#a9b3c1;}
+.post-header img {width:30px; height:30px; border-radius:50%; margin-right:8px;}
+.post-content p {padding:12px; margin:0; font-size:15px; color:#e0e6ed;}
+.post-actions {display:flex; justify-content:space-around; padding:10px; border-top:1px solid #363b45;}
+.post-actions button {background:none; border:none; cursor:pointer; font-size:16px; display:flex; align-items:center; gap:6px; color:#a9b3c1; transition:color 0.2s, transform 0.2s;}
+.post-actions button:hover {color:#3a8dff; transform:scale(1.1);}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h3>Amigos</h3>
+  <input type="text" id="searchFriend" placeholder="Buscar amigo">
+  <button id="addFriendBtn" class="btn" style="width:100%; margin-bottom:10px;">Añadir amigo</button>
+  <ul id="friendsList"></ul>
+
+  <h3>Grupos</h3>
+  <input type="text" id="groupName" placeholder="Nombre del grupo">
+  <button id="createGroupBtn" class="btn" style="width:100%; margin-bottom:10px;">Crear grupo</button>
+  <ul id="groupsList"></ul>
+</div>
+
+<div class="main">
+<header>
+  <h1>Nimbus</h1>
+  <div class="user-area" id="userArea">
+    <button class="btn" id="loginBtn">Iniciar sesión</button>
+  </div>
+</header>
+
+<div class="feed-container">
+  <div class="new-post" id="newPostBox" style="display:none;">
+    <textarea id="postText" rows="3" placeholder="¿Qué estás pensando? (máx 280 caracteres)"></textarea>
+    <button class="btn" id="postBtn">Publicar</button>
+  </div>
+  <div id="feed"></div>
+</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, setDoc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAuJNMD4d0a2uehA4UCEx7WNRlkjzWG8X8",
+  authDomain: "mini4chan-50c4d.firebaseapp.com",
+  projectId: "mini4chan-50c4d",
+  storageBucket: "mini4chan-50c4d.appspot.com",
+  messagingSenderId: "476495367772",
+  appId: "1:476495367772:web:3ce2ab7266bfd047eba099",
+  measurementId: "G-VSC6XWFGE7"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+const db = getFirestore(app);
+
+let currentUser = null;
+
+const userArea = document.getElementById("userArea");
+const newPostBox = document.getElementById("newPostBox");
+const postBtn = document.getElementById("postBtn");
+const postText = document.getElementById("postText");
+const feed = document.getElementById("feed");
+
+const searchFriend = document.getElementById("searchFriend");
+const addFriendBtn = document.getElementById("addFriendBtn");
+const friendsList = document.getElementById("friendsList");
+
+const groupName = document.getElementById("groupName");
+const createGroupBtn = document.getElementById("createGroupBtn");
+const groupsList = document.getElementById("groupsList");
+
+// Render usuario
+function renderUser() {
+  if(currentUser){
+    userArea.innerHTML = `<img src="${currentUser.photoURL}" class="profile-pic" title="${currentUser.displayName}">
+    <button class="btn" id="logoutBtn">Cerrar sesión</button>`;
+    newPostBox.style.display="block";
+    document.getElementById("logoutBtn").addEventListener("click", async()=>{
+      await signOut(auth);
+      currentUser=null;
+      renderUser();
+    });
+  } else {
+    userArea.innerHTML = `<button class="btn" id="loginBtn">Iniciar sesión</button>`;
+    newPostBox.style.display="none";
+    document.getElementById("loginBtn").addEventListener("click", async()=>{
+      const result = await signInWithPopup(auth, provider);
+      currentUser=result.user;
+      await initUserDoc();
+      renderUser();
+      loadFriends();
+      loadGroups();
+    });
+  }
+}
+
+// Crear doc de usuario si no existe
+async function initUserDoc(){
+  const userRef = doc(db,"users",currentUser.uid);
+  const snap = await getDoc(userRef);
+  if(!snap.exists()){
+    await setDoc(userRef,{displayName:currentUser.displayName, photoURL:currentUser.photoURL, friends:[], groups:[]});
+  }
+}
+
+// Publicar post
+postBtn.addEventListener("click", async()=>{
+  const text = postText.value.trim();
+  if(!text) return;
+  if(text.length>280){ alert("Máximo 280 caracteres"); return; }
+  await addDoc(collection(db,"posts"),{
+    text,
+    userId:currentUser.uid,
+    userName:currentUser.displayName,
+    photoURL:currentUser.photoURL,
+    likes:0,
+    timestamp:serverTimestamp()
+  });
+  postText.value="";
+});
+
+// Feed
+const postsQuery = query(collection(db,"posts"), orderBy("timestamp","desc"));
+onSnapshot(postsQuery,(snapshot)=>{
+  feed.innerHTML="";
+  snapshot.forEach(docSnap=>{
+    const data=docSnap.data();
+    const postEl=document.createElement("div");
+    postEl.className="post";
+    postEl.innerHTML=`
+      <div class="post-header">
+        <img src="${data.photoURL}">
+        <b>${data.userName}</b>
+      </div>
+      <div class="post-content"><p>${data.text}</p></div>
+      <div class="post-actions">
+        <button onclick="likePost('${docSnap.id}', ${data.likes})">❤️ ${data.likes}</button>
+      </div>`;
+    feed.appendChild(postEl);
+  });
+});
+
+window.likePost=async(id,likes)=>{
+  const ref=doc(db,"posts",id);
+  await updateDoc(ref,{likes:likes+1});
+};
+
+// Añadir amigo
+addFriendBtn.addEventListener("click", async () => {
+  if(!currentUser) return alert("Inicia sesión primero");
+  const searchName = searchFriend.value.trim();
+  if (!searchName) return;
+  const usersCol = collection(db, "users");
+  const snapshot = await getDocs(usersCol);
+  let friendId = null;
+  snapshot.forEach(docu => {
+    if(docu.data().displayName === searchName) friendId = docu.id;
+  });
+  if(!friendId) return alert("Usuario no encontrado");
+  const userRef = doc(db,"users",currentUser.uid);
+  const friendRef = doc(db,"users",friendId);
+  await updateDoc(userRef,{friends:arrayUnion(friendId)});
+  await updateDoc(friendRef,{friends:arrayUnion(currentUser.uid)});
+  alert("Amigo añadido!");
+  loadFriends();
+});
+
+// Crear grupo
+createGroupBtn.addEventListener("click", async () => {
+  if(!currentUser) return alert("Inicia sesión primero");
+  const name = groupName.value.trim();
+  if(!name) return;
+  const docRef = await addDoc(collection(db,"groups"),{
+    name,
+    members: [currentUser.uid],
+    createdBy: currentUser.uid
+  });
+  const userRef = doc(db,"users",currentUser.uid);
+  await updateDoc(userRef,{groups:arrayUnion(docRef.id)});
+  groupName.value="";
+  loadGroups();
+});
+
+async function loadFriends(){
+  if(!currentUser) return;
+  const userRef = doc(db,"users",currentUser.uid);
+  const snap = await getDoc(userRef);
+  if(!snap.exists()) return;
+  const data = snap.data();
+  friendsList.innerHTML="";
+  for(let f of data.friends){
+    const fsnap=await getDoc(doc(db,"users",f));
+    if(fsnap.exists()){
+      const li=document.createElement("li");
+      li.textContent=fsnap.data().displayName;
+      friendsList.appendChild(li);
+    }
+  }
+}
+
+async function loadGroups(){
+  if(!currentUser) return;
+  const userRef = doc(db,"users",currentUser.uid);
+  const snap = await getDoc(userRef);
+  if(!snap.exists()) return;
+  const data = snap.data();
+  groupsList.innerHTML="";
+  for(let g of data.groups){
+    const gsnap=await getDoc(doc(db,"groups",g));
+    if(gsnap.exists()){
+      const li=document.createElement("li");
+      li.textContent=gsnap.data().name;
+      groupsList.appendChild(li);
+    }
+  }
+}
+
+renderUser();
+</script>
+</body>
+</html>
